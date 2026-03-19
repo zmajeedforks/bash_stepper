@@ -31,7 +31,7 @@
 function usage {
   echo "Usage: test_stepper.sh"
   echo "Interactive commands test script"
-  confirm_step_usage
+  stepper_usage
 }
 
 function test_confirm_inside_function {
@@ -58,17 +58,48 @@ function test_confirm_inside_function {
   echo
 
   stepper_confirm_step "Function last command" func_last_command
-  echo func_step_1_output
+  echo func_last_command_output
 }
 
 function test_list_steps {
   stepper_list_steps
 }
 
+while getopts "hlr" opt; do
+  case $opt in
+    l)
+      list_steps=true
+      ;;
+    r)
+      mode=noninteractive
+      ;;
+    h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      exit 1
+  esac
+done
+shift $((OPTIND - 1))
 
-echo "Test confirm_step_list_steps"
-test_list_steps
-echo
+if (($# > 0)); then
+  usage
+  exit 1
+fi
+
+: ${mode:=interactive}
+: ${list_steps:=false}
+
+if $list_steps; then
+  echo "Test stepper_list_steps"
+  stepper_list_steps
+fi
+
+if [[ $mode == noninteractive ]]; then
+  stepper_run_noninteractive
+fi
 
 echo "Test stepper_confirm_step in main script"
 
@@ -93,7 +124,7 @@ echo main_step_${step}_output_3
 echo
 
 cmdout=
-stepper_confirm_step "Main Step 5 with command substitution" main_step_5
+stepper_confirm_step "Main Step 5 with command substitution and variable assignment" main_step_5
 cmdout=$(echo main_step_5_output)
 echo "cmdout \"$cmdout\""
 echo
@@ -105,8 +136,9 @@ if true; then
   echo if_then_block_step_1_output
   echo
 
-  stepper_confirm_step "If-then block Step 2" if_then_block_step_2
-  echo if_then_block_step_2_output
+  stepper_confirm_step "If-then block Step 2 with pipeline" if_then_block_step_2
+  echo if_then_block_step_2_output |
+  cat
   echo
 
   step=3

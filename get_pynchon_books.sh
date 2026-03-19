@@ -32,17 +32,17 @@
 function usage {
   echo "Usage: get_pynchon_books.sh [-h] [-l] [-r]"
   echo "Example using stepper.sh to interactively control commands execution"
-  confirm_step_usage
+  stepper_usage
 }
 
 function make_books_tsv_from_wiki_table {
 
   stepper_confirm_step "Extract books from wiki table" books_tsv_from_wiki_table
-  jq -r '.parse.wikitext."*"' < biblio_wikitext.json |
+  jq -r '.parse.wikitext."*"' < bib_wikitext.json |
   sed -nE '
 # Books section
   /^=== Books ===$/,/^$/ {
-# wiki table
+# wiki table between {| ... |}
     /^\{\|/,/^\|\}$/ {
 
 # strip leading and trailing space
@@ -50,9 +50,10 @@ function make_books_tsv_from_wiki_table {
       s/ +$//
       /^$/d
 
-# new fields
+# new field
 # add tab delimiter and accumulate
 # causes every row to start with extra newline and tab before first field that we remove before printing
+
     /^((\|[^-}])|!) */ {
         s//\t/
         H
@@ -62,12 +63,15 @@ function make_books_tsv_from_wiki_table {
 # new row is |-, table end is |}
 # emit previous row
 # remove extra first tab
+
       /^\|-|\|\}$/ {
+# get previous completed row from holdspace
         g
 # strip extra newline and tab at start of row
         s/^\n\t//
         s/\n//g
         p
+# clear holdspace
         s/.*//
         x
         d
@@ -85,6 +89,8 @@ function make_books_tsv_from_wiki_table {
   awk -F'\t' '
     BEGIN {OFS = "\t"}
 
+# sample
+# {{plainlist|* {{LCCN|638634}}* {{OCLC|288349}}}}
     {
       for(i = 1; i <= NF; ++i) {
         if($i !~ /^\{\{plainlist\| *\* */) {
@@ -97,6 +103,11 @@ function make_books_tsv_from_wiki_table {
       }
     }
 
+# sample
+# ''[[V.]]''
+# {{sort|Crying of Lot 49, The|''[[The Crying of Lot 49]]''}}
+# [[J. B. Lippincott & Co.|Lippincourt]] (Philadelphia)
+# Novella{{NoteTag|name=Story|In the introduction to ''Slow Learner'', Pynchon set the title as "The Crying of Lot 49"—within double [[quotation mark]]s, rather than italics—and described it as a "story" that had been "marketed as a 'novel{{'"}}.{{sfn|Pynchon|1984|p=22}}}}
     {
       for(i = 1; i <= NF; ++i) {
         $i = gensub(/\{\{sort\|[^}]+\|([^}]+)\}\}/, "\\1", 1, $i)
@@ -105,9 +116,13 @@ function make_books_tsv_from_wiki_table {
       }
     }
 
+# sample
+# Mar 18,<br>1963
     {
       for(i = 1; i <= NF; ++i) {
+# strip remnants of wikitext templates
         $i = gensub(/^.*\| */, "", 1, $i)
+# replace html linebreaks with space
         $i = gensub(/<br>/, " ", "g", $i)
       }
     }
@@ -154,7 +169,7 @@ fi
 stepper_confirm_step "Download Pynchon Wikipedia page" download_pynchon_page
 wget --convert-links -O pynchon_wiki.html https://en.wikipedia.org/wiki/Thomas_Pynchon
 
-stepper_confirm_step "Extract Pynchon bibliography link" extract_biblio_link
+stepper_confirm_step "Extract Pynchon bibliography link" extract_bib_link
 cmdout=$(grep -o 'Main article:.*Thomas Pynchon bibliography' pynchon_wiki.html |
   sed -E '
     s/^(.*)href="([^"]+)"(.*)/[href]=\2\t\1\3/
@@ -163,20 +178,20 @@ cmdout=$(grep -o 'Main article:.*Thomas Pynchon bibliography' pynchon_wiki.html 
   '
 )
 declare -A props="($cmdout)"
-biblio_url=${props[href]}
-biblio_title=${props[title]}
+bib_url=${props[href]}
+bib_title=${props[title]}
 
-stepper_confirm_step "Download Pynchon bibliography from $biblio_url" download_biblio_page
-wget -O biblio_wiki.html $biblio_url
+stepper_confirm_step "Download Pynchon bibliography from $bib_url" download_bib_page
+wget -O bib_wiki.html $bib_url
 
-stepper_confirm_step "Download page info for Pynchon bibliography page $biblio_title"
-wget -O biblio_info.json "https://en.wikipedia.org/w/api.php?action=query&format=json&utf8&titles=$biblio_title&prop=pageprops"
+stepper_confirm_step "Download page info for Pynchon bibliography page $bib_title"
+wget -O bib_info.json "https://en.wikipedia.org/w/api.php?action=query&format=json&utf8&titles=$bib_title&prop=pageprops"
 
 stepper_confirm_step "Get page id for Pynchon bibliography page"
-biblio_pageid=$(jq -r '.query.pages | keys[0]' < biblio_info.json)
+bib_pageid=$(jq -r '.query.pages | keys[0]' < bib_info.json)
 
-stepper_confirm_step "Download wikitext for Pynchon bibliography page id $biblio_pageid" download_biblio_wikitext
-wget -O biblio_wikitext.json "https://en.wikipedia.org/w/api.php?action=parse&format=json&utf8&disabletoc&prop=wikitext&section=1&pageid=$biblio_pageid"
+stepper_confirm_step "Download wikitext for Pynchon bibliography page id $bib_pageid" download_bib_wikitext
+wget -O bib_wikitext.json "https://en.wikipedia.org/w/api.php?action=parse&format=json&utf8&disabletoc&prop=wikitext&section=1&pageid=$bib_pageid"
 
 make_books_tsv_from_wiki_table
 

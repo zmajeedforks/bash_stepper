@@ -2,7 +2,12 @@
 
 `stepper.sh` is a library of functions to control the execution of commands in a bash script
 
-Call `stepper_confirm_step` right before any command to trace and control
+Call `stepper_confirm_step` right before any command to trace and control. For example
+
+```
+stepper_confirm_step "Print millisecond time" print_time_ms
+date +%F_%T.%3N
+```
 
 Let's look at a simple webscraping example. Let's get a list of books written by Thomas Pynchon in tab-delimited format.
 
@@ -23,7 +28,7 @@ Description: Download Pynchon Wikipedia page
 Commands: Use `wget` to download Wikipedia page
 
 2. Scrape the link to his bibliography from the downloaded page
-Name: extract_biblio_link
+Name: extract_bib_link
 Description: Extract Pynchon bibliography link
 Commands: Use `grep` and `sed` to scrape link of bibliography page from bibliography section in downloaded page. We'll actually get the title of the bibliography page too in order to retrieve it as JSON data by title.
 
@@ -36,7 +41,7 @@ Description: Get page ID of bibliography page
 Commands: `jq` to extract JSON data from downloaded page info. Need page id to get bibliography as JSON data.
 
 5. Download bibliography as JSON data
-Name: download_biblio_wikitext
+Name: download_bib_wikitext
 Description: Download wikitext for bibliography by page id
 Commands: `wget` Wikipedia API for article wikitext by page id
 
@@ -54,7 +59,7 @@ Commands: Use `jq` to extract wiki table. Convert wiki table to tab-delimited re
 stepper_confirm_step "Download Pynchon Wikipedia page" download_pynchon_page
 wget --convert-links -O pynchon_wiki.html https://en.wikipedia.org/wiki/Thomas_Pynchon
 
-stepper_confirm_step "Extract Pynchon bibliography link" extract_biblio_link
+stepper_confirm_step "Extract Pynchon bibliography link" extract_bib_link
 cmdout=$(grep -o 'Main article:.*Thomas Pynchon bibliography' pynchon_wiki.html |
   sed -E '
     s/^(.*)href="([^"]+)"(.*)/[href]=\2\t\1\3/
@@ -63,20 +68,20 @@ cmdout=$(grep -o 'Main article:.*Thomas Pynchon bibliography' pynchon_wiki.html 
   '
 )
 declare -A props="($cmdout)"
-biblio_url=${props[href]}
-biblio_title=${props[title]}
+bib_url=${props[href]}
+bib_title=${props[title]}
 
-stepper_confirm_step "Download Pynchon bibliography from $biblio_url" download_biblio_page
-wget -O biblio_wiki.html $biblio_url
+stepper_confirm_step "Download Pynchon bibliography from $bib_url" download_bib_page
+wget -O bib_wiki.html $bib_url
 
-stepper_confirm_step "Download page info for Pynchon bibliography page $biblio_title"
-wget -O biblio_info.json "https://en.wikipedia.org/w/api.php?action=query&format=json&utf8&titles=$biblio_title&prop=pageprops"
+stepper_confirm_step "Download page info for Pynchon bibliography page $bib_title"
+wget -O bib_info.json "https://en.wikipedia.org/w/api.php?action=query&format=json&utf8&titles=$bib_title&prop=pageprops"
 
 stepper_confirm_step "Get page id for Pynchon bibliography page"
-biblio_pageid=$(jq -r '.query.pages | keys[0]' < biblio_info.json)
+bib_pageid=$(jq -r '.query.pages | keys[0]' < bib_info.json)
 
-stepper_confirm_step "Download wikitext for Pynchon bibliography page id $biblio_pageid" download_biblio_wikitext
-wget -O biblio_wikitext.json "https://en.wikipedia.org/w/api.php?action=parse&format=json&utf8&disabletoc&prop=wikitext&section=1&pageid=$biblio_pageid"
+stepper_confirm_step "Download wikitext for Pynchon bibliography page id $bib_pageid" download_bib_wikitext
+wget -O bib_wikitext.json "https://en.wikipedia.org/w/api.php?action=parse&format=json&utf8&disabletoc&prop=wikitext&section=1&pageid=$bib_pageid"
 
 make_books_tsv_from_wiki_table
 ```

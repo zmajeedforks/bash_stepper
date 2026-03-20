@@ -170,3 +170,23 @@ for step in $loop_steps; do
   echo "$step"
 done
 
+echo "Test disable commands, no output should appear till commands are reenabled below"
+stepper_disable_commands
+
+echo disabled_output_1_should_not_appear
+echo disabled_output_2_should_not_appear
+
+stepper_enable_commands
+echo "Test enable commands"
+echo enabled_output_1_should_appear
+
+echo "Test disabled stepper_confirm_step inside if-then block"
+if true; then
+  stepper_disable_commands
+  stepper_confirm_step "Disabled confirm_step 1 inside if-then block"
+  echo disabled_step_output_1
+
+  stepper_enable_commands
+  stepper_confirm_step "Disabled confirm_step 2 inside if-then block"
+  echo disabled_step_output_2
+fi

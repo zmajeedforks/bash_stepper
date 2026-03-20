@@ -31,7 +31,10 @@
 
 function usage {
   echo "Usage: get_pynchon_books.sh [-h] [-l] [-r]"
-  echo "Example using stepper.sh to interactively control commands execution"
+  echo "Example of using stepper.sh to interactively control commands execution"
+  echo "-l: list all steps"
+  echo "-r: run entire script noninteractively"
+  echo "-h: help"
   stepper_usage
 }
 
@@ -165,6 +168,9 @@ fi
 if [[ $mode == noninteractive ]]; then
   stepper_run_noninteractive
 fi
+
+stepper_confirm_step
+date
 
 stepper_confirm_step "Download Pynchon Wikipedia page" download_pynchon_page
 wget --convert-links -O pynchon_wiki.html https://en.wikipedia.org/wiki/Thomas_Pynchon

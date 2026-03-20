@@ -60,7 +60,7 @@ declare -A stepper_config=(
 
 declare confirm_step_label=""
 declare confirm_step_msg=""
-declare stepper_list_cmd=false
+declare stepper_list_step=false
 
 # replace plain bash variable references with values in expression
 # usage: confirm_step_expandvars filled_expression "$expression_with_variables"
@@ -80,8 +80,7 @@ function confirm_step_expandvars {
 # assignment is stripped along with command substitution operator annd command is extracted for variable expansion
 # command is not run
 # cmdout=$(curl $url) becomes "curl $url"
-# pattern is ^[$' \t']*[_[:alnum:]]+=\$\((.*)\) ]] && s=${BASH_REMATCH[1]}
-#[[ $s =~ ^[$' \t']*[_[:alnum:]]+=\$\((.*)\) ]] && s=${BASH_REMATCH[1]}
+# pattern is ^[$' \t']*[_[:alnum:]]+=\$\((.*)\)
 if [[ $s =~ ^[$' \t']*[_[:alnum:]]+=\$\((.*)\) ]]; then
   s=${BASH_REMATCH[1]}
 fi
@@ -123,17 +122,12 @@ fi
 # contains interactive prompt for user to confirm next command
 
 function confirm_step_trap {
-# unset debug trap for stepper_confirm_step to run all its commands without coming back here
-  if [[ $BASH_COMMAND == stepper_confirm_step\ * ]]; then
-    trap - debug
-    return 0
-  fi
-  local cmdsblock="$(history 1 | sed -E '1s/^ *[0-9]+ +//')"
+
   local called_from_line=${BASH_LINENO[0]}
 # make default step message from line number of step command like "Run command at line 15"
   [[ -z $confirm_step_msg ]] && confirm_step_msg="Run command at line $called_from_line"
 
-# unset debug trap if command is last in multicommand step
+# unset debug trap if there's just one command or command is last in multicommand step
   if (( confirm_step_multicmds_idx + 1 == confirm_step_multicmds_count )); then
     trap - debug
   fi
@@ -296,8 +290,10 @@ function stepper_confirm_step {
 # make default step label from step line number like line_14
   confirm_step_label=${2:-line_$called_from_line}
 
+# set stepper_list_step for list trap to print following step
   if [[ ${stepper_config[mode]} == list ]]; then
-    stepper_list_cmd=true
+    stepper_list_step=true
+# trap will run for return statement below before command that follows stepper_confirm_step
     trap list_mode_trap debug
     return
   fi
@@ -343,34 +339,67 @@ function stepper_confirm_step {
     cmds_block=${cmds_block#*${BASH_REMATCH[0]}}
   fi
 
+# set debug trap to disable_commands_trap after processing cmds_block
+  if ${stepper_config[disable_all_commands]}; then
+    trap disable_commands_trap debug
+    return
+  fi
+
 # set debug trap to confirm next command
   trap confirm_step_trap debug
 }
 
+# runs through entire script, prints each step label and message
 function list_mode_trap {
 # unset debug trap for stepper_confirm_step to run all its commands without coming back here
-  if [[ $BASH_COMMAND == stepper_confirm_step\ * ]]; then
+  if [[ $BASH_COMMAND == stepper_confirm_step?( )* ]]; then
     trap - debug
     return 0
   fi
 
-  if $stepper_list_cmd; then
-    local called_from_line=${BASH_LINENO[0]}
-    [[ -z $confirm_step_msg ]] && confirm_step_msg="Run command at line $called_from_line"
-    echo "$confirm_step_label: $confirm_step_msg"
-    stepper_list_cmd=false
-    return 1
+# print step only after we're out of stepper_confirm_step
+  if $stepper_list_step && [[ ${FUNCNAME[1]} != stepper_confirm_step ]]; then
+    local msg=$confirm_step_msg
+    if [[ -z $msg ]]; then
+      local called_from_line=${BASH_LINENO[0]}
+      local msg="Run command at line $called_from_line"
+    fi
+    echo "$confirm_step_label: $msg"
+    stepper_list_step=false
   fi
 
+# don't run any other command
   return 1
 }
 
 function disable_commands_trap {
+
+# reenable commands
   if [[ $BASH_COMMAND == stepper_enable_commands ]]; then
     trap - debug
     stepper_config[disable_all_commands]=false
     return 0
   fi
+
+# allow stepper_confirm_step to run for its proper operation to continue if reenabled
+  if [[ $BASH_COMMAND == stepper_confirm_step?( )* ]]; then
+    trap - debug
+    return 0
+  fi
+
+  if (( confirm_step_multicmds_idx < confirm_step_multicmds_count )); then
+    let ++confirm_step_multicmds_idx
+# process commands block just like confirm_step_trap
+    if [[ -n $cmds_block ]]; then
+      if $cmds_block_is_function; then
+        cmds_block=${cmds_block#*;$'\n'*( )}
+      else
+        cmds_block=${cmds_block#*; *( )}
+      fi
+    fi
+  fi
+
+# don't run any other commands
   return 1
 }
 
@@ -387,7 +416,7 @@ function stepper_enable_commands {
 
 function stepper_usage {
   echo "This script runs interactive steps. Each step is a significant command that must be confirmed or skipped."
-  echo "A label and message is printed for each step"
+  echo "A label and message is printed for each step. The command that runs or is skipped is printed after the user response"
   echo "The response is a single case-insensitive character - y/n/q/j/r"
   echo "y: yes, run next command (space and newline act as y)"
   echo "q: quit, exit script immediately"
